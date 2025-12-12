@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <title>Admin Login</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
+    <link href="main.css" rel="stylesheet">
+    <link href="admin.css" rel="stylesheet">
+</head>
+<body>
+
+    <div class="d-flex justify-content-center align-items-center min-vh-100 py-4">
+        <div class="kiosk-card w-100 animate-fade" style="max-width: 400px;">
+            
+            <div class="kiosk-header pb-0">
+                <img src="img/ubulogo.png" 
+                     alt="Logo" class="university-logo mb-3">
+                
+                <div>
+                    <span class="admin-badge"><i class="bi bi-shield-lock-fill me-1"></i> Staff Only</span>
+                </div>
+                
+                <h4 class="mb-1 fw-bold" style="color: var(--primary);">เข้าสู่ระบบผู้ดูแล</h4>
+                <p class="text-muted small">CKLab Management System</p>
+            </div>
+            
+            <div class="kiosk-body pt-3">
+
+                <form id="loginForm">
+                    <div class="mb-3">
+                        <label class="text-label">Username</label>
+                        <div class="input-group">
+                            <span class="input-group-text"><i class="bi bi-person-fill"></i></span>
+                            <input type="text" id="admUser" class="form-control" placeholder="ชื่อผู้ใช้" required>
+                        </div>
+                    </div>
+
+                    <div class="mb-4">
+                        <label class="text-label">Password</label>
+                        <div class="input-group">
+                            <span class="input-group-text"><i class="bi bi-key-fill"></i></span>
+                            <input type="password" id="admPass" class="form-control" placeholder="รหัสผ่าน" required>
+                        </div>
+                    </div>
+
+                    <button type="button" onclick="doAdminLogin()" class="btn btn-primary w-100 py-2 fw-bold shadow-sm mb-3">
+                        <i class="bi bi-box-arrow-in-right me-2"></i>เข้าสู่ระบบ
+                    </button>
+                </form>
+
+                <div class="text-center border-top pt-3">
+                    <a href="index.html" id="backLink" class="text-decoration-none text-muted small hover-underline">
+                        <i class="bi bi-arrow-left me-1"></i>กลับไปหน้า Check-in
+                    </a>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <script src="mock-db.js"></script>
+
+    <script>
+        // --- ส่วนทำงานอัตโนมัติเมื่อเปิดหน้าเว็บ ---
+        document.addEventListener('DOMContentLoaded', () => {
+            
+            // เช็คว่าเจอ mock-db ไหม
+            if (typeof DB === 'undefined') {
+                alert("Critical Error: ไม่พบไฟล์ mock-db.js กรุณาเช็คว่าไฟล์อยู่ในโฟลเดอร์เดียวกันหรือไม่");
+                return;
+            }
+
+            // ถ้าล็อกอินอยู่แล้ว ให้ไปหน้า Dashboard
+            const session = DB.getSession();
+            if (session && session.user && session.user.role === 'admin') {
+                window.location.href = 'admin-monitor.html';
+                return;
+            }
+
+            // ตั้งค่าลิงก์ย้อนกลับ
+            const backLink = document.getElementById('backLink');
+            if (backLink) {
+                if (session && session.pcId) {
+                    backLink.href = `index.html#${session.pcId}`;
+                    backLink.innerHTML = `<i class="bi bi-arrow-left me-1"></i>กลับไปที่เครื่อง ${session.pcId}`;
+                } else {
+                    backLink.href = 'index.html';
+                }
+            }
+        });
+
+        // --- ฟังก์ชัน Login (เรียกเมื่อกดปุ่ม) ---
+        function doAdminLogin() {
+            // ดึงค่าจากช่องกรอก
+            const userEl = document.getElementById('admUser');
+            const passEl = document.getElementById('admPass');
+
+            if (!userEl || !passEl) {
+                alert("Error: ไม่พบช่องกรอกข้อมูล");
+                return;
+            }
+
+            const u = userEl.value.trim();
+            const p = passEl.value.trim();
+
+            console.log("Checking Login:", u, p); // ดูใน Console F12 ได้
+
+            // ตรวจสอบรหัส (admin / 1234)
+            if (u === 'admin' && p === '1234') {
+                
+                // บันทึก Session
+                DB.setSession({ 
+                    user: { name: 'Administrator', role: 'admin' } 
+                });
+
+                // ไปหน้า Dashboard
+                alert('✅ เข้าสู่ระบบสำเร็จ');
+                window.location.href = 'admin-monitor.html';
+
+            } else {
+                alert('❌ ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง\n(Username: admin, Password: 1234)');
+                passEl.value = ''; // ล้างรหัสผ่าน
+                passEl.focus();
+            }
+        }
+
+        // รองรับการกด Enter
+        document.getElementById('loginForm').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                doAdminLogin();
+            }
+        });
+    </script>
+</body>
+</html>

@@ -1,4 +1,4 @@
-/* admin-booking.js - Complete Version */
+/* admin-booking.js - Complete Version (New Time Slot + Manage/Delete Fixed) */
 
 let bookingModal;
 
@@ -8,7 +8,8 @@ document.addEventListener('DOMContentLoaded', () => {
     if (modalEl) bookingModal = new bootstrap.Modal(modalEl);
 
     // Set Default Date Filter = Today
-    document.getElementById('bookingDateFilter').valueAsDate = new Date();
+    const dateFilter = document.getElementById('bookingDateFilter');
+    if (dateFilter) dateFilter.valueAsDate = new Date();
 
     // Render
     renderBookings();
@@ -30,23 +31,29 @@ function renderBookings() {
         return true;
     });
 
-    // ✅ การเรียงลำดับ (Status > PC > Time)
+    // ✅ ส่วนที่แก้ไข: ปรับลำดับ (Priority) ให้ no_show เป็นเลขมากสุด (4) เพื่อให้อยู่ล่างสุด
     filtered.sort((a, b) => {
         const statusPriority = {
-            'reserved': 1,
-            'in_use': 2,
-            'completed': 3,
-            'no_show': 3
+            'reserved': 1,   // จอง (บนสุด)
+            'in_use': 2,     // ใช้งานอยู่
+            'completed': 3,  // เสร็จสิ้น
+            'no_show': 4     // ไม่พบการใช้งาน (ล่างสุด)
         };
+        
+        // ถ้าสถานะอื่น ๆ ที่ไม่รู้จัก ให้ถือว่าเป็นระดับ 3
         const priorityA = statusPriority[a.status] || 3;
         const priorityB = statusPriority[b.status] || 3;
+        
+        // เรียงจากน้อยไปมาก (1 -> 4)
         if (priorityA !== priorityB) return priorityA - priorityB;
 
+        // ถ้าสถานะเท่ากัน ให้เรียงตามชื่อเครื่อง (PC Name)
         const nameA = a.pcName || '';
         const nameB = b.pcName || '';
         const pcCompare = nameA.localeCompare(nameB, undefined, { numeric: true, sensitivity: 'base' });
         if (pcCompare !== 0) return pcCompare;
 
+        // ถ้าเครื่องเดียวกัน ให้เรียงตามเวลา (Start Time)
         const timeA = a.startTime || '';
         const timeB = b.startTime || '';
         return timeA.localeCompare(timeB);
@@ -92,7 +99,6 @@ function renderBookings() {
         // เพิ่มปุ่มลบ
         actionBtns += ` <button class="btn btn-sm btn-outline-danger ms-1" onclick="deleteBooking('${b.id}')"><i class="bi bi-trash"></i></button>`;
 
-        // ✅ แสดงผล Software/AI เป็น Badge
         let softwareDisplay = '-';
         if (b.softwareList && Array.isArray(b.softwareList)) {
             softwareDisplay = b.softwareList.map(sw => {
@@ -119,9 +125,16 @@ function renderBookings() {
     });
 }
 
-// --- ACTIONS ---
+// --- ACTIONS (จัดการสถานะ/ลบ) ---
 
 function updateStatus(id, newStatus) {
+    // ✅ ส่วนที่เพิ่ม: แจ้งเตือนยืนยันเฉพาะกรณี "No Show"
+    if (newStatus === 'no_show') {
+        if (!confirm('ยืนยันแจ้งว่าผู้จองไม่มาแสดงตัว (No Show)?\nระบบจะปรับสถานะเครื่องกลับเป็น "ว่าง" (Available) ทันที')) {
+            return; // ถ้ากด Cancel ให้หยุดการทำงาน
+        }
+    }
+
     let bookings = DB.getBookings();
     const index = bookings.findIndex(b => b.id === id);
     if (index !== -1) {
@@ -133,6 +146,17 @@ function updateStatus(id, newStatus) {
         renderBookings();
     }
 }
+
+function deleteBooking(id) {
+    if(confirm('คุณต้องการลบรายการจองนี้ออกจากระบบใช่หรือไม่?')) {
+        let bookings = DB.getBookings();
+        const newBookings = bookings.filter(b => b.id !== id);
+        DB.saveBookings(newBookings);
+        renderBookings();
+    }
+}
+
+// --- NEW MODAL FUNCTIONS (ส่วนใหม่ที่คุณเพิ่มเข้าไป) ---
 
 function openBookingModal() {
     const pcs = DB.getPCs();
@@ -147,14 +171,16 @@ function openBookingModal() {
 
     document.getElementById('bkUser').value = '';
     document.getElementById('bkDate').valueAsDate = new Date();
-    document.getElementById('bkTimeStart').value = '09:00';
-    document.getElementById('bkTimeEnd').value = '12:00';
     
-    // ✅ Reset ประเภท
-    document.getElementById('typeGeneral').checked = true;
+    // รีเซ็ต Time Slot และ Type Select
+    const timeSlot = document.getElementById('bkTimeSlot');
+    if(timeSlot) timeSlot.selectedIndex = 0;
+    
+    const typeSelect = document.getElementById('bkTypeSelect');
+    if(typeSelect) typeSelect.value = 'General';
+
     toggleSoftwareList();
 
-    // ✅ โหลดรายชื่อ AI
     const container = document.getElementById('aiCheckboxList');
     container.innerHTML = '';
     const lib = DB.getSoftwareLib ? DB.getSoftwareLib() : [];
@@ -175,7 +201,7 @@ function openBookingModal() {
         });
     }
 
-    bookingModal.show();
+    if(bookingModal) bookingModal.show();
 }
 
 function saveBooking() {
@@ -196,8 +222,41 @@ function saveBooking() {
         finalUserId = 'Manual-' + Date.now(); 
     }
 
-    // ✅ ดึงค่า AI ที่เลือก
-    const isAI = document.getElementById('typeAI').checked;
+    // ดึงเวลาจาก Dropdown
+    const timeSlotValue = document.getElementById('bkTimeSlot').value;
+    const [startTime, endTime] = timeSlotValue.split('-');
+
+    // ============================================================
+    // 🛑 เริ่มส่วนตรวจสอบเวลาซ้ำ (เพิ่มใหม่ตรงนี้)
+    // ============================================================
+    const checkDate = document.getElementById('bkDate').value;
+    const existingBookings = DB.getBookings();
+
+    const conflict = existingBookings.find(b => {
+        const isSamePc = String(b.pcId) === String(pcId);
+        const isSameDate = b.date === checkDate;
+        // เช็คทั้ง reserved และ in_use เพื่อกันพลาด
+        const isNotAvailable = (b.status === 'reserved' || b.status === 'in_use');
+
+        if (isSamePc && isSameDate && isNotAvailable) {
+             // เช็คเวลาเหลื่อมกัน
+             return (startTime < b.endTime && endTime > b.startTime);
+        }
+        return false;
+    });
+
+    if (conflict) {
+        alert(`❌ ไม่สามารถจองได้!\nเครื่องนี้ถูกจองแล้วในช่วงเวลา ${conflict.startTime} - ${conflict.endTime}\n(โดย: ${conflict.userName})`);
+        return; // หยุดการทำงาน ห้ามบันทึก
+    }
+    // ============================================================
+    // สิ้นสุดส่วนตรวจสอบ
+    // ============================================================
+
+    // ตรวจสอบประเภท AI
+    const typeSelect = document.getElementById('bkTypeSelect');
+    const isAI = typeSelect && typeSelect.value === 'AI';
+
     let selectedTools = [];
     if (isAI) {
         const checkboxes = document.querySelectorAll('input[name="aiSelect"]:checked');
@@ -211,9 +270,9 @@ function saveBooking() {
         userName: finalUserName,
         pcId: pcId,
         pcName: pc ? pc.name : 'Unknown',
-        date: document.getElementById('bkDate').value,
-        startTime: document.getElementById('bkTimeStart').value,
-        endTime: document.getElementById('bkTimeEnd').value,
+        date: checkDate, // ใช้ตัวแปร checkDate ที่ดึงมาแล้ว
+        startTime: startTime,
+        endTime: endTime,
         softwareList: displaySoftware,
         status: 'reserved'
     };
@@ -222,27 +281,21 @@ function saveBooking() {
     bookings.push(newBooking);
     DB.saveBookings(bookings);
 
-    bookingModal.hide();
+    if(bookingModal) bookingModal.hide();
     renderBookings();
     alert(`✅ บันทึกการจองสำเร็จ\n(ผู้จอง: ${finalUserName})`);
 }
 
-function deleteBooking(id) {
-    if(confirm('คุณต้องการลบรายการจองนี้ออกจากระบบใช่หรือไม่?')) {
-        let bookings = DB.getBookings();
-        const newBookings = bookings.filter(b => b.id !== id);
-        DB.saveBookings(newBookings);
-        renderBookings();
-    }
-}
-
-// ✅ ฟังก์ชัน Toggle การแสดงผลรายชื่อ AI
 function toggleSoftwareList() {
-    const isAI = document.getElementById('typeAI').checked;
+    const typeSelect = document.getElementById('bkTypeSelect');
+    const isAI = typeSelect && typeSelect.value === 'AI';
+    
     const box = document.getElementById('aiSelectionBox');
-    if (isAI) {
-        box.classList.remove('d-none');
-    } else {
-        box.classList.add('d-none');
+    if (box) {
+        if (isAI) {
+            box.classList.remove('d-none');
+        } else {
+            box.classList.add('d-none');
+        }
     }
 }

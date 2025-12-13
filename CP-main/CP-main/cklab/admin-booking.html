@@ -104,32 +104,25 @@
                         </div>
                         <div class="row g-2 mb-3">
                             <div class="col-6">
-                                <label class="form-label">เวลาเริ่ม</label>
-                                <input type="time" id="bkTimeStart" class="form-control" required>
+                                <label class="form-label">ช่วงเวลา</label>
+                                <select id="bkTimeSlot" class="form-select" required>
+                                    <option value="09:00-10:30">09:00 - 10:30</option>
+                                    <option value="10:30-12:00">10:30 - 12:00</option>
+                                    <option value="13:30-15:00">13:30 - 15:00</option>
+                                    <option value="15:00-16:30">15:00 - 16:00</option>
+                                </select>
                             </div>
                             <div class="col-6">
-                                <label class="form-label">ถึงเวลา</label>
-                                <input type="time" id="bkTimeEnd" class="form-control" required>
+                                <label class="form-label">ประเภทการใช้งาน</label>
+                                <select id="bkTypeSelect" class="form-select" onchange="toggleSoftwareList()">
+                                    <option value="General">ซอฟต์แวร์ทั่วไป</option>
+                                    <option value="AI">AI / Tools (เลือกรายการ)</option>
+                                </select>
                             </div>
                         </div>
 
-                        <div class="mb-3">
-                            <label class="form-label fw-bold">ประเภทการใช้งาน</label>
-                            <div class="d-flex gap-3 mb-2">
-                                <div class="form-check">
-                                    <input class="form-check-input" type="radio" name="bkType" id="typeGeneral" value="General" checked onchange="toggleSoftwareList()">
-                                    <label class="form-check-label" for="typeGeneral">ซอฟต์แวร์ทั่วไป</label>
-                                </div>
-                                <div class="form-check">
-                                    <input class="form-check-input" type="radio" name="bkType" id="typeAI" value="AI" onchange="toggleSoftwareList()">
-                                    <label class="form-check-label" for="typeAI">AI / Tools (เลือกรายการ)</label>
-                                </div>
-                            </div>
-
-                            <div id="aiSelectionBox" class="card p-2 d-none" style="max-height: 150px; overflow-y: auto; background: #f8f9fa;">
-                                <div id="aiCheckboxList" class="row g-2">
-                                    </div>
-                            </div>
+                        <div id="aiSelectionBox" class="card p-2 d-none mb-3" style="max-height: 150px; overflow-y: auto; background: #f8f9fa;">
+                            <div id="aiCheckboxList" class="row g-2"></div>
                         </div>
 
                         <div class="d-grid">

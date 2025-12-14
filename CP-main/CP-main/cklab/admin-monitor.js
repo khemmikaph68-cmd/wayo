@@ -333,10 +333,10 @@ function performForceCheckout(pcId) {
     renderMonitor();
 }
 
-// --- 8. AUTO CHECK BOOKING TIME (เวอร์ชันตรวจสอบ) ---
+// --- 8. AUTO CHECK BOOKING TIME (เวอร์ชันอัปเกรด: เพิ่ม Auto No-Show 30 นาที) ---
 function checkBookingTime() {
     // 1. ดึงข้อมูล
-    const bookings = DB.getBookings();
+    let bookings = DB.getBookings(); // ใช้ let เพื่อให้แก้ไขค่าในอาร์เรย์ได้
     const pcs = DB.getPCs();
     const now = new Date();
 
@@ -348,26 +348,61 @@ function checkBookingTime() {
 
     const h = String(now.getHours()).padStart(2, '0');
     const min = String(now.getMinutes()).padStart(2, '0');
-    const timeStr = `${h}:${min}`;
+    const currentTimeStr = `${h}:${min}`;
 
-    // Debug: ดูว่าฟังก์ชันทำงานไหม (กด F12 ดูใน Console)
-    // console.log(`[Check] Now: ${todayStr} ${timeStr}`);
+    let isBookingUpdated = false; // ตัวแปรเช็คว่ามีการเปลี่ยนแปลงข้อมูล Booking หรือไม่
 
     bookings.forEach(b => {
-        // ตรวจสอบเฉพาะรายการที่ "อนุมัติ" และเป็น "วันนี้"
-        if (b.status === 'reserved' && b.date === todayStr) {
+        // ทำงานเฉพาะรายการของ "วันนี้" และสถานะ "จอง" (reserved)
+        if (b.date === todayStr && b.status === 'reserved') {
             
-            // เช็คว่าถึงเวลาหรือยัง (เวลาปัจจุบัน อยู่ระหว่าง เริ่ม - จบ)
-            if (timeStr >= b.startTime && timeStr < b.endTime) {
-                
+            // ---------------------------------------------------------
+            // A. Logic เดิม: ถึงเวลาเริ่ม -> เปลี่ยนสถานะเครื่องเป็น Reserved
+            // ---------------------------------------------------------
+            // ถ้าถึงเวลาเริ่ม (และยังไม่หมดเวลาจอง)
+            if (currentTimeStr >= b.startTime && currentTimeStr < b.endTime) {
                 const pc = pcs.find(p => String(p.id) === String(b.pcId));
                 
-                // ถ้าเจอเครื่อง และเครื่องยังว่างอยู่ -> เปลี่ยนสีเหลือง
+                // ถ้าเครื่องยังว่างอยู่ ให้ขึ้นป้ายจอง
                 if (pc && pc.status === 'available') {
-                    console.log(`✅ ถึงเวลาจอง! เปลี่ยนสถานะเครื่อง ${pc.name} เป็น Reserved`);
+                    console.log(`✅ Auto-Reserve: PC-${pc.id} for ${b.userName}`);
                     DB.updatePCStatus(pc.id, 'reserved', b.userName);
+                    renderMonitor(); // รีเฟรชหน้าจอ
+                }
+            }
+
+            // ---------------------------------------------------------
+            // B. Logic ใหม่: เกิน 30 นาทีแล้วยังไม่ Check-in -> ปรับเป็น No Show
+            // ---------------------------------------------------------
+            
+            // 1. สร้าง Object เวลาเริ่มจอง เพื่อคำนวณ
+            const [startH, startM] = b.startTime.split(':').map(Number);
+            const bookingStartObj = new Date(now.getFullYear(), now.getMonth(), now.getDate(), startH, startM);
+            
+            // 2. กำหนดเส้นตาย (Deadline) = เวลาเริ่ม + 30 นาที
+            // (30 * 60 * 1000 = 1,800,000 milliseconds)
+            const deadlineObj = new Date(bookingStartObj.getTime() + (30 * 60000)); 
+
+            // 3. ถ้าเวลาปัจจุบัน (now) เลยกำหนด (deadline) ไปแล้ว
+            if (now > deadlineObj) {
+                console.log(`❌ Auto No-Show: Booking ID ${b.id} (User: ${b.userName})`);
+
+                // อัปเดตสถานะ Booking เป็น No Show
+                b.status = 'no_show';
+                isBookingUpdated = true;
+
+                // ปล่อยเครื่องว่าง (ถ้าเครื่องยังสถานะ reserved อยู่)
+                const pc = pcs.find(p => String(p.id) === String(b.pcId));
+                if (pc && pc.status === 'reserved') {
+                    DB.updatePCStatus(pc.id, 'available');
                 }
             }
         }
     });
+
+    // ถ้ามีการแก้ไขข้อมูล Booking ต้องบันทึกกลับลง DB
+    if (isBookingUpdated) {
+        DB.saveBookings(bookings);
+        renderMonitor(); // รีเฟรชหน้าจอเพื่อแสดงสถานะว่าง
+    }
 }

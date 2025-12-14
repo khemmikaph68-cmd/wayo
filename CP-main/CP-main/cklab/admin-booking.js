@@ -15,7 +15,7 @@ document.addEventListener('DOMContentLoaded', () => {
     renderBookings();
 });
 
-// --- RENDER TABLE ---
+// --- RENDER TABLE (แสดงตาราง) ---
 function renderBookings() {
     const tbody = document.getElementById('bookingTableBody');
     const bookings = DB.getBookings();
@@ -31,7 +31,7 @@ function renderBookings() {
         return true;
     });
 
-    // ✅ ส่วนที่แก้ไข: ปรับลำดับ (Priority) ให้ no_show เป็นเลขมากสุด (4) เพื่อให้อยู่ล่างสุด
+    // เรียงลำดับ (Status > PC > Time)
     filtered.sort((a, b) => {
         const statusPriority = {
             'reserved': 1,   // จอง (บนสุด)
@@ -40,20 +40,16 @@ function renderBookings() {
             'no_show': 4     // ไม่พบการใช้งาน (ล่างสุด)
         };
         
-        // ถ้าสถานะอื่น ๆ ที่ไม่รู้จัก ให้ถือว่าเป็นระดับ 3
         const priorityA = statusPriority[a.status] || 3;
         const priorityB = statusPriority[b.status] || 3;
         
-        // เรียงจากน้อยไปมาก (1 -> 4)
         if (priorityA !== priorityB) return priorityA - priorityB;
 
-        // ถ้าสถานะเท่ากัน ให้เรียงตามชื่อเครื่อง (PC Name)
         const nameA = a.pcName || '';
         const nameB = b.pcName || '';
         const pcCompare = nameA.localeCompare(nameB, undefined, { numeric: true, sensitivity: 'base' });
         if (pcCompare !== 0) return pcCompare;
 
-        // ถ้าเครื่องเดียวกัน ให้เรียงตามเวลา (Start Time)
         const timeA = a.startTime || '';
         const timeB = b.startTime || '';
         return timeA.localeCompare(timeB);
@@ -74,30 +70,32 @@ function renderBookings() {
             case 'reserved':
                 badgeClass = 'bg-warning text-dark'; 
                 statusText = 'จอง';
-                actionBtns = `<button class="btn btn-sm btn-outline-secondary" onclick="updateStatus('${b.id}', 'no_show')"><i class="bi bi-person-x"></i> No Show</button>`;
+                actionBtns = `<button class="btn btn-sm btn-outline-secondary" onclick="updateStatus('${b.id}', 'no_show')" title="แจ้ง No Show (ไม่มา)"><i class="bi bi-person-x"></i></button>`;
                 break;
             case 'in_use':
                 badgeClass = 'bg-danger'; 
                 statusText = 'ใช้งานอยู่';
-                actionBtns = `<button class="btn btn-sm btn-outline-success" onclick="updateStatus('${b.id}', 'completed')"><i class="bi bi-check-lg"></i> เสร็จสิ้น</button>`;
+                actionBtns = `<button class="btn btn-sm btn-outline-success" onclick="updateStatus('${b.id}', 'completed')" title="เสร็จสิ้นการใช้งาน"><i class="bi bi-check-lg"></i></button>`;
                 break;
             case 'completed':
                 badgeClass = 'bg-success'; 
                 statusText = 'ใช้งานเสร็จสิ้น';
-                actionBtns = `<span class="text-muted small"><i class="bi bi-check-circle-fill"></i> เรียบร้อย</span>`;
+                // ✅ แก้ไข: ตัดข้อความ "เรียบร้อย" ออก (ปล่อยว่าง)
+                actionBtns = ``; 
                 break;
             case 'no_show':
                 badgeClass = 'bg-secondary'; 
                 statusText = 'ไม่พบการใช้งาน';
-                actionBtns = `<span class="text-muted small">ยกเลิก/ไม่มา</span>`;
+                // ✅ แก้ไข: ปล่อยว่างเช่นกัน
+                actionBtns = ``; 
                 break;
             default:
                 badgeClass = 'bg-light text-dark border'; 
                 statusText = b.status;
         }
 
-        // เพิ่มปุ่มลบ
-        actionBtns += ` <button class="btn btn-sm btn-outline-danger ms-1" onclick="deleteBooking('${b.id}')"><i class="bi bi-trash"></i></button>`;
+        // เพิ่มปุ่มลบ (ถังขยะ) ต่อท้ายเสมอ
+        actionBtns += ` <button class="btn btn-sm btn-outline-danger ms-1" onclick="deleteBooking('${b.id}')" title="ลบรายการ"><i class="bi bi-trash"></i></button>`;
 
         let softwareDisplay = '-';
         if (b.softwareList && Array.isArray(b.softwareList)) {
@@ -123,28 +121,6 @@ function renderBookings() {
         `;
         tbody.appendChild(tr);
     });
-}
-
-// --- ACTIONS (จัดการสถานะ/ลบ) ---
-
-function updateStatus(id, newStatus) {
-    // ✅ ส่วนที่เพิ่ม: แจ้งเตือนยืนยันเฉพาะกรณี "No Show"
-    if (newStatus === 'no_show') {
-        if (!confirm('ยืนยันแจ้งว่าผู้จองไม่มาแสดงตัว (No Show)?\nระบบจะปรับสถานะเครื่องกลับเป็น "ว่าง" (Available) ทันที')) {
-            return; // ถ้ากด Cancel ให้หยุดการทำงาน
-        }
-    }
-
-    let bookings = DB.getBookings();
-    const index = bookings.findIndex(b => b.id === id);
-    if (index !== -1) {
-        if (newStatus === 'no_show' || newStatus === 'completed') {
-            DB.updatePCStatus(bookings[index].pcId, 'available');
-        }
-        bookings[index].status = newStatus;
-        DB.saveBookings(bookings);
-        renderBookings();
-    }
 }
 
 function deleteBooking(id) {
